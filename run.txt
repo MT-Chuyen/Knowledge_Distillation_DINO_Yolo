@@ -1,0 +1,4 @@
+/home/chuyenmt/.venv/bin/python train_teacher.py
+/home/chuyenmt/.venv/bin/python train_student.py --mode baseline
+/home/chuyenmt/.venv/bin/python train_student.py --mode kd
+/home/chuyenmt/.venv/bin/python evaluate.py --model student --weights runs/student_kd/best.pt

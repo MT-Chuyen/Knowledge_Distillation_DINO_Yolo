@@ -1,0 +1,59 @@
+# Single source of truth for paths, hyperparams and model size.
+#
+# img_size = 448 is the LCM-style sweet spot:
+#   448 / 14 = 32  (teacher patch grid for DINOv2)
+#   448 / 32 = 14  (YOLOv11 max stride; P3=56, P4=28, P5=14)
+# So both backbones see the same input and feature KD is a clean spatial alignment.
+data:
+  root: /home/chuyenmt/code/full_animal
+  num_classes: 20
+  img_size: 448
+  grid_size: 32                         # teacher head grid (=img_size/14)
+  batch_size: 16
+  num_workers: 4
+
+teacher:
+  dinov2_name: dinov2_vitl14_reg        # DINOv2-L w/ registers (loaded via torch.hub)
+  embed_dim: 1024
+  freeze_backbone: true                 # backbone frozen, only LoRA + head learn
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  head_hidden: 256
+  ckpt: runs/teacher/best.pt
+
+student:
+  # YOLOv11s weights. "yolo11s.pt" auto-downloads via Ultralytics on first use.
+  yolo_weights: yolo11s.pt
+  pretrained: true                      # if false, head is reinitialised AND backbone too (random init)
+  # Which layer of the YOLOv11 Sequential to hook for feature distillation. Layer 19 is the
+  # post-neck P4 output [256ch, 28x28] for yolo11s at 448 input — spatially closest to the
+  # teacher's 32x32 grid and rich because the neck has already fused multi-scale info.
+  kd_feat_layer_idx: 19
+  ckpt_baseline: runs/student_baseline/best.pt
+  ckpt_kd: runs/student_kd/best.pt
+
+train:
+  epochs_teacher: 20
+  epochs_student: 30
+  lr_teacher: 0.0003
+  lr_student: 0.001
+  weight_decay: 0.0001
+  amp: true
+  conf_threshold: 0.25
+  nms_iou: 0.5
+
+# Ultralytics' standard loss component weights — used by v8DetectionLoss for the supervised path.
+yolo_loss:
+  box: 7.5
+  cls: 0.5
+  dfl: 1.5
+
+kd:
+  # Logit KD is dropped — YOLOv11s and the teacher's dense head don't share an output spec.
+  # We keep the two intermediate-feature mechanisms from the tutorial:
+  #   w_feat   -> FitNets MSE through a 1x1 regressor + bilinear interp (mechanism #3)
+  #   w_cosine -> CosineEmbeddingLoss on globally-pooled features        (mechanism #2)
+  w_sup: 1.0      # weight on the Ultralytics supervised loss
+  w_feat: 1.0     # weight on FitNets-style feature MSE
+  w_cosine: 0.5   # weight on cosine-similarity loss on pooled features

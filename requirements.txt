@@ -1,0 +1,9 @@
+# Use the existing torch / torchvision in /home/chuyenmt/.venv (torch 2.11+cu130).
+# Only install what is missing.
+peft>=0.13
+transformers>=4.45
+timm>=1.0
+tqdm
+PyYAML
+Pillow
+numpy
